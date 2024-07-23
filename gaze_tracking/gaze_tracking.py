@@ -2,9 +2,10 @@ from __future__ import division
 import os
 import cv2
 import dlib
+import numpy as np
+from collections import deque
 from .eye import Eye
 from .calibration import Calibration
-
 
 class GazeTracking(object):
     """
@@ -27,6 +28,11 @@ class GazeTracking(object):
         model_path = os.path.abspath(os.path.join(cwd, "trained_models/shape_predictor_68_face_landmarks.dat"))
         self._predictor = dlib.shape_predictor(model_path)
 
+        self.gaze_points = deque(maxlen=30)  # Store last 30 gaze points
+        self.fixation_threshold = 0.05  # Threshold for fixation detection
+        self.saccade_threshold = 0.1  # Threshold for saccade detection
+        self.min_fixation_duration = 5  # Minimum number of frames for a fixation
+
     @property
     def pupils_located(self):
         """Check that the pupils have been located"""
@@ -48,6 +54,10 @@ class GazeTracking(object):
             landmarks = self._predictor(frame, faces[0])
             self.eye_left = Eye(frame, landmarks, 0, self.calibration)
             self.eye_right = Eye(frame, landmarks, 1, self.calibration)
+
+            if self.pupils_located:
+                gaze_point = self.horizontal_ratio(), self.vertical_ratio()
+                self.gaze_points.append(gaze_point)
 
         except IndexError:
             self.eye_left = None
@@ -117,6 +127,41 @@ class GazeTracking(object):
             blinking_ratio = (self.eye_left.blinking + self.eye_right.blinking) / 2
             return blinking_ratio > 3.8
 
+    def detect_saccade(self):
+        """Detects if a saccade occurred in the last frame"""
+        if len(self.gaze_points) < 2:
+            return False
+        
+        current_point = self.gaze_points[-1]
+        previous_point = self.gaze_points[-2]
+        
+        distance = np.sqrt((current_point[0] - previous_point[0])**2 + 
+                           (current_point[1] - previous_point[1])**2)
+        
+        return distance > self.saccade_threshold
+
+    def detect_fixation(self):
+        """Detects if the gaze is currently in a fixation"""
+        if len(self.gaze_points) < self.min_fixation_duration:
+            return False
+        
+        recent_points = list(self.gaze_points)[-self.min_fixation_duration:]
+        center = np.mean(recent_points, axis=0)
+        
+        for point in recent_points:
+            distance = np.sqrt((point[0] - center[0])**2 + (point[1] - center[1])**2)
+            if distance > self.fixation_threshold:
+                return False
+        
+        return True
+
+    def get_fixation_center(self):
+        """Returns the center of the current fixation"""
+        if self.detect_fixation():
+            recent_points = list(self.gaze_points)[-self.min_fixation_duration:]
+            return np.mean(recent_points, axis=0)
+        return None
+
     def annotated_frame(self):
         """Returns the main frame with pupils highlighted"""
         frame = self.frame.copy()
@@ -129,5 +174,18 @@ class GazeTracking(object):
             cv2.line(frame, (x_left, y_left - 5), (x_left, y_left + 5), color)
             cv2.line(frame, (x_right - 5, y_right), (x_right + 5, y_right), color)
             cv2.line(frame, (x_right, y_right - 5), (x_right, y_right + 5), color)
+
+            h, w = frame.shape[:2]
+            gaze_ratio = self.horizontal_ratio(), self.vertical_ratio()
+            x = int(gaze_ratio[0] * w)
+            y = int(gaze_ratio[1] * h)
+            
+            cv2.circle(frame, (x, y), 10, (0, 255, 255), 2)
+            
+            if self.detect_fixation():
+                cv2.putText(frame, "Fixation", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            
+            if self.detect_saccade():
+                cv2.putText(frame, "Saccade", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         return frame
