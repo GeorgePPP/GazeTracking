@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  gazetracking:
+    image: gazetracking:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/home/GazeTracking
+    working_dir: /home/GazeTracking
+    command: /bin/bash -c "while true; do sleep 1000; done"
+    environment:hat
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8888:8888"
