@@ -10,7 +10,7 @@ services:
       - .:/home/GazeTracking
     working_dir: /home/GazeTracking
     command: /bin/bash -c "while true; do sleep 1000; done"
-    environment:hat
+    environment:
       - PYTHONUNBUFFERED=1
     ports:
       - "8888:8888"
