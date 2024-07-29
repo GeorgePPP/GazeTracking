@@ -3,6 +3,7 @@ import os
 import cv2
 import dlib
 import numpy as np
+import logging
 from collections import deque
 from .eye import Eye
 from .calibration import Calibration
@@ -49,6 +50,11 @@ class GazeTracking(object):
         """Detects the face and initialize Eye objects"""
         frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         faces = self._face_detector(frame)
+        
+        if len(faces) == 0:
+            self.eye_left = None
+            self.eye_right = None
+            return False  # Indicate that no face was detected
 
         try:
             landmarks = self._predictor(frame, faces[0])
@@ -59,18 +65,23 @@ class GazeTracking(object):
                 gaze_point = self.horizontal_ratio(), self.vertical_ratio()
                 self.gaze_points.append(gaze_point)
 
+            return True  # Indicate that a face was detected
         except IndexError:
             self.eye_left = None
             self.eye_right = None
+            return False  # Indicate that no face was detected
 
     def refresh(self, frame):
         """Refreshes the frame and analyzes it.
 
         Arguments:
             frame (numpy.ndarray): The frame to analyze
+
+        Returns:
+            bool: True if a face was detected, False otherwise
         """
         self.frame = frame
-        self._analyze()
+        return self._analyze()
 
     def pupil_left_coords(self):
         """Returns the coordinates of the left pupil"""
@@ -187,5 +198,7 @@ class GazeTracking(object):
             
             if self.detect_saccade():
                 cv2.putText(frame, "Saccade", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        else:
+            cv2.putText(frame, "No face detected", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         return frame

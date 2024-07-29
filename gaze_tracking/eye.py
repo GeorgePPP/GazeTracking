@@ -3,7 +3,6 @@ import numpy as np
 import cv2
 from .pupil import Pupil
 
-
 class Eye(object):
     """
     This class creates a new frame to isolate the eye and
@@ -19,6 +18,7 @@ class Eye(object):
         self.center = None
         self.pupil = None
         self.landmark_points = None
+        self.blinking = None
 
         self._analyze(original_frame, landmarks, side, calibration)
 
@@ -42,6 +42,9 @@ class Eye(object):
             landmarks (dlib.full_object_detection): Facial landmarks for the face region
             points (list): Points of an eye (from the 68 Multi-PIE landmarks)
         """
+        if frame is None or landmarks is None:
+            return
+
         region = np.array([(landmarks.part(point).x, landmarks.part(point).y) for point in points])
         region = region.astype(np.int32)
         self.landmark_points = region
@@ -63,8 +66,9 @@ class Eye(object):
         self.frame = eye[min_y:max_y, min_x:max_x]
         self.origin = (min_x, min_y)
 
-        height, width = self.frame.shape[:2]
-        self.center = (width / 2, height / 2)
+        if self.frame is not None and self.frame.size > 0:
+            height, width = self.frame.shape[:2]
+            self.center = (width / 2, height / 2)
 
     def _blinking_ratio(self, landmarks, points):
         """Calculates a ratio that can indicate whether an eye is closed or not.
@@ -77,6 +81,9 @@ class Eye(object):
         Returns:
             The computed ratio
         """
+        if landmarks is None:
+            return None
+
         left = (landmarks.part(points[0]).x, landmarks.part(points[0]).y)
         right = (landmarks.part(points[3]).x, landmarks.part(points[3]).y)
         top = self._middle_point(landmarks.part(points[1]), landmarks.part(points[2]))
@@ -102,6 +109,9 @@ class Eye(object):
             side: Indicates whether it's the left eye (0) or the right eye (1)
             calibration (calibration.Calibration): Manages the binarization threshold value
         """
+        if original_frame is None or landmarks is None:
+            return
+
         if side == 0:
             points = self.LEFT_EYE_POINTS
         elif side == 1:
@@ -112,8 +122,9 @@ class Eye(object):
         self.blinking = self._blinking_ratio(landmarks, points)
         self._isolate(original_frame, landmarks, points)
 
-        if not calibration.is_complete():
-            calibration.evaluate(self.frame, side)
+        if self.frame is not None and self.frame.size > 0:
+            if not calibration.is_complete():
+                calibration.evaluate(self.frame, side)
 
-        threshold = calibration.threshold(side)
-        self.pupil = Pupil(self.frame, threshold)
+            threshold = calibration.threshold(side)
+            self.pupil = Pupil(self.frame, threshold)
