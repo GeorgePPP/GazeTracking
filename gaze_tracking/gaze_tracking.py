@@ -1,10 +1,8 @@
 from __future__ import division
-import os
 import cv2
-import dlib
 import numpy as np
-import logging
 from collections import deque
+import mediapipe as mp
 from .eye import Eye
 from .calibration import Calibration
 
@@ -17,22 +15,22 @@ class GazeTracking(object):
 
     def __init__(self):
         self.frame = None
-        self.eye_left = None
+        self.eye_left = None    
         self.eye_right = None
         self.calibration = Calibration()
 
-        # _face_detector is used to detect faces
-        self._face_detector = dlib.get_frontal_face_detector()
-
-        # _predictor is used to get facial landmarks of a given face
-        cwd = os.path.abspath(os.path.dirname(__file__))
-        model_path = os.path.abspath(os.path.join(cwd, "trained_models/shape_predictor_68_face_landmarks.dat"))
-        self._predictor = dlib.shape_predictor(model_path)
+        # Initialize MediaPipe Face Mesh
+        self.mp_face_mesh = mp.solutions.face_mesh
+        self.face_mesh = self.mp_face_mesh.FaceMesh(
+            max_num_faces=1,
+            refine_landmarks=True,
+            min_detection_confidence=0.8,
+            min_tracking_confidence=0.8)
 
         self.gaze_points = deque(maxlen=30)  # Store last 30 gaze points
         self.fixation_threshold = 0.05  # Threshold for fixation detection
-        self.saccade_threshold = 0.1  # Threshold for saccade detection
-        self.min_fixation_duration = 5  # Minimum number of frames for a fixation
+        self.saccade_threshold = 0.05  # Threshold for saccade detection
+        self.min_fixation_duration = 10  # Minimum number of frames for a fixation
 
     @property
     def pupils_located(self):
@@ -48,28 +46,25 @@ class GazeTracking(object):
 
     def _analyze(self):
         """Detects the face and initialize Eye objects"""
-        frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
-        faces = self._face_detector(frame)
+        frame_rgb = cv2.cvtColor(self.frame, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(frame_rgb)
         
-        if len(faces) == 0:
+        if not results.multi_face_landmarks:
             self.eye_left = None
             self.eye_right = None
             return False  # Indicate that no face was detected
 
-        try:
-            landmarks = self._predictor(frame, faces[0])
-            self.eye_left = Eye(frame, landmarks, 0, self.calibration)
-            self.eye_right = Eye(frame, landmarks, 1, self.calibration)
+        face_landmarks = results.multi_face_landmarks[0]
+        landmarks = face_landmarks.landmark
 
-            if self.pupils_located:
-                gaze_point = self.horizontal_ratio(), self.vertical_ratio()
-                self.gaze_points.append(gaze_point)
+        self.eye_left = Eye(self.frame, landmarks, 0, self.calibration)
+        self.eye_right = Eye(self.frame, landmarks, 1, self.calibration)
 
-            return True  # Indicate that a face was detected
-        except IndexError:
-            self.eye_left = None
-            self.eye_right = None
-            return False  # Indicate that no face was detected
+        if self.pupils_located:
+            gaze_point = self.horizontal_ratio(), self.vertical_ratio()
+            self.gaze_points.append(gaze_point)
+
+        return True  # Indicate that a face was detected
 
     def refresh(self, frame):
         """Refreshes the frame and analyzes it.
@@ -197,8 +192,14 @@ class GazeTracking(object):
                 cv2.putText(frame, "Fixation", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
             
             if self.detect_saccade():
-                cv2.putText(frame, "Saccade", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                text_coor_x = int(w // 2)
+                text_coor_y = int(h // 2) 
+                cv2.putText(frame, "Saccade", (text_coor_x, text_coor_y), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         else:
             cv2.putText(frame, "No face detected", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         return frame
+
+    def __del__(self):
+        """Clean up resources"""
+        self.face_mesh.close()

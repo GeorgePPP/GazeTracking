@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     apt-get install -y libfontconfig1 && \
     apt-get install -y libgtk2.0-dev && \
     apt-get install -y pkg-config && \
+    apt-get install -y ffmpeg && \
+    apt-get install -y libgl1-mesa-glx && \
     pkg-config --version
 
 # Upgrade pip and show its version
