@@ -10,7 +10,7 @@ from gaze_tracking import GazeTracking
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def process_video(input_path, output_path, json_output_path):
+def process_video(input_path, output_path, json_output_path, csv_output_path):
     # Initialize GazeTracking
     gaze = GazeTracking()
 
@@ -43,6 +43,7 @@ def process_video(input_path, output_path, json_output_path):
     fixation_count = 0
     gaze_events = []
     last_event = None
+    saccade_frames = []
 
     while True:
         # Read a frame from the video
@@ -70,6 +71,7 @@ def process_video(input_path, output_path, json_output_path):
                 gaze_events.append(('saccade', current_time))
                 saccade_count += 1
                 last_event = 'saccade'
+                saccade_frames.append(frame_count)
             elif is_fixation and last_event != 'fixation':
                 gaze_events.append(('fixation', current_time))
                 fixation_count += 1
@@ -98,18 +100,26 @@ def process_video(input_path, output_path, json_output_path):
     with open(json_output_path, 'w') as f:
         json.dump(gaze_events, f)
 
+    # Write saccade frames and total frames to CSV file
+    with open(csv_output_path, 'w') as f:
+        f.write("saccade_frame,total_frames\n")
+        for frame in saccade_frames:
+            f.write(f"{frame},{total_frames}\n")
+
     logger.info(f"Video processing completed. Output saved to {output_path}")
     logger.info(f"Gaze events saved to {json_output_path}")
+    logger.info(f"Saccade frames saved to {csv_output_path}")
     logger.info(f"Total saccades: {saccade_count}")
     logger.info(f"Total fixations: {fixation_count}")
 
 def create_dir_if_not_exist(file_path):
     if not os.path.exists(file_path):
         os.makedirs(file_path)
-     
+        
 def main(args):
     create_dir_if_not_exist(args.output_vid_dir)
     create_dir_if_not_exist(args.output_ann_dir)
+    create_dir_if_not_exist(args.output_csv_dir)
 
     # Process a list of videos
     if os.path.isdir(args.data_path):
@@ -120,8 +130,10 @@ def main(args):
                 output_path = os.path.join(args.output_vid_dir, file_name)
                 json_output_name = os.path.splitext(file_name)[0] + '.json'
                 json_output_path = os.path.join(args.output_ann_dir, json_output_name)
+                csv_output_name = os.path.splitext(file_name)[0] + '.csv'
+                csv_output_path = os.path.join(args.output_csv_dir, csv_output_name)
                 logger.info(f"Starting video processing for {file_name}")
-                process_video(vid_path, output_path, json_output_path)
+                process_video(vid_path, output_path, json_output_path, csv_output_path)
                 logger.info(f"Video processing for {file_name} finished")
 
     # Process a single video file
@@ -131,8 +143,10 @@ def main(args):
         output_path = os.path.join(args.output_vid_dir, file_name)
         json_output_name = os.path.splitext(file_name)[0] + '.json'
         json_output_path = os.path.join(args.output_ann_dir, json_output_name)
+        csv_output_name = os.path.splitext(file_name)[0] + '.csv'
+        csv_output_path = os.path.join(args.output_csv_dir, csv_output_name)
         logger.info(f"Starting video processing for {file_name}")
-        process_video(vid_path, output_path, json_output_path)
+        process_video(vid_path, output_path, json_output_path, csv_output_path)
         logger.info(f"Video processing for {file_name} finished")
 
     else:
@@ -146,6 +160,8 @@ if __name__ == "__main__":
                         help='Directory for output processed videos')
     parser.add_argument('output_ann_dir', type=str,
                         help='Directory for output annotation JSON files')
+    parser.add_argument('output_csv_dir', type=str,
+                        help='Directory for output CSV files')
     args = parser.parse_args()
 
     main(args)
