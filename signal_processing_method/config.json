@@ -1,0 +1,14 @@
+{
+    "screen_width": 3840, 
+    "screen_height": 2160,
+    "pixels_per_degree": 30, 
+    "savgol_window": 11,
+    "savgol_polyorder": 3, 
+    "saccade_onset_velocity": 30,
+    "saccade_offset_velocity": 10,
+    "min_saccade_duration": 0.012,
+    "min_intersaccadic_interval": 0.04, 
+    "max_velocity": 800,
+    "alpha": 4, 
+    "beta": 11.95
+}
